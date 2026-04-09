@@ -1,0 +1,5 @@
+{
+  "name": "ScamShield",
+  "description": "AI-powered scam detection for everyday Nigerians and Africans. Say no to scams.",
+  "requestFramePermissions": ["microphone"]
+}
