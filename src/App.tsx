@@ -27,10 +27,27 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Remove direct Gemini initialization
+// const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const callAiApi = async (prompt: string, systemInstruction: string, responseMimeType?: string, contents?: any) => {
+  const response = await fetch("/api/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ prompt, contents, systemInstruction, responseMimeType }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to analyze");
+  }
+
+  const data = await response.json();
+  return data;
+};
 
 type Tab = 'Analyze' | 'Voice' | 'Links' | 'Community' | 'Learn';
 
@@ -411,16 +428,9 @@ export default function App() {
     setIsFetchingTip(true);
     try {
       const systemInstruction = "Generate one practical, specific tip for Nigerians to avoid online scams today. Focus on a current scam trend. Write it like a wise older sibling giving advice. Max 3 sentences. In plain English, then repeat in Nigerian Pidgin. No markdown.";
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: "Give me today's anti-scam tip.",
-        config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.7,
-        },
-      });
-      if (response.text) {
-        setDailyAiTip(response.text);
+      const data = await callAiApi("Give me today's anti-scam tip.", systemInstruction);
+      if (data.text) {
+        setDailyAiTip(data.text);
       }
     } catch (e) {
       setDailyAiTip("Shine your eyes online! Never share your OTP or PIN with anybody, even if they claim to be from your bank. No let anybody format you!");
@@ -538,38 +548,32 @@ Respond ONLY in this JSON format:
   "recommendation": "one clear action"
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [
-          {
-            inlineData: {
-              mimeType: "audio/mp4",
-              data: base64Audio
-            }
-          },
-          {
-            text: "Transcribe this audio then analyze it for scams and deepfake indicators. Return JSON only."
+      const contents = [
+        {
+          inlineData: {
+            mimeType: "audio/mp4",
+            data: base64Audio
           }
-        ],
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.2,
         },
-      });
+        {
+          text: "Transcribe this audio then analyze it for scams and deepfake indicators. Return JSON only."
+        }
+      ];
 
-      if (response.text) {
+      const data = await callAiApi("", systemInstruction, "application/json", contents);
+      
+      if (data.text) {
         try {
-          const data = JSON.parse(response.text) as VoiceAnalysisResult;
-          setVoiceResult(data);
+          const parsedData = JSON.parse(data.text) as VoiceAnalysisResult;
+          setVoiceResult(parsedData);
         } catch (e) {
           console.error("JSON Parse Error:", e);
           setVoiceError("We received an invalid response from the AI. Please try again.");
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Voice analysis failed:", err);
-      setVoiceError("Something went wrong with the voice analysis. Please check your connection and try again.");
+      setVoiceError(err.message || "Something went wrong with the voice analysis. Please check your connection and try again.");
     } finally {
       setIsAnalyzingVoice(false);
     }
@@ -613,29 +617,21 @@ Red flags must be SPECIFIC to the message — not generic.
 Bad: "requests money" 
 Good: "Asks for ₦5,000 before employment starts — real companies never do this"`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      });
+      const data = await callAiApi(prompt, systemInstruction, "application/json");
 
-      if (response.text) {
+      if (data.text) {
         try {
-          const data = JSON.parse(response.text) as AnalysisResult;
-          setResult(data);
-          setCachedResponse(cacheKey, data);
+          const parsedData = JSON.parse(data.text) as AnalysisResult;
+          setResult(parsedData);
+          setCachedResponse(cacheKey, parsedData);
         } catch (e) {
           console.error("JSON Parse Error:", e);
           setError("We received an invalid response from the AI. Please try again.");
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Analysis failed:", err);
-      setError("Something went wrong. Please check your connection and try again.");
+      setError(err.message || "Something went wrong. Please check your connection and try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -718,29 +714,21 @@ Respond ONLY in this JSON:
         ? `Analyze this link for scam indicators: ${linkInput}`
         : `Analyze this ${numberInput.length > 11 ? 'account' : 'phone'} number for scam indicators: ${numberInput} ${selectedBank ? `(Bank: ${selectedBank})` : ''}`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      });
+      const data = await callAiApi(prompt, systemInstruction, "application/json");
 
-      if (response.text) {
+      if (data.text) {
         try {
-          const data = JSON.parse(response.text) as LinkAnalysisResult;
-          setLinkResult(data);
-          setCachedResponse(cacheKey, data);
+          const parsedData = JSON.parse(data.text) as LinkAnalysisResult;
+          setLinkResult(parsedData);
+          setCachedResponse(cacheKey, parsedData);
         } catch (e) {
           console.error("JSON Parse Error:", e);
           setLinkError("Invalid response from AI.");
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Link analysis failed:", err);
-      setLinkError("Analysis failed. Please try again.");
+      setLinkError(err.message || "Analysis failed. Please try again.");
     } finally {
       setIsAnalyzingLink(false);
     }
@@ -755,18 +743,10 @@ Respond ONLY in this JSON:
     if (reportEvidence.trim()) {
       try {
         const systemInstruction = `Analyze this text for scam indicators. Respond ONLY in JSON: {"verdict": "SCAM" | "SAFE", "confidence": 0-100}`;
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: `Analyze this: ${reportEvidence}`,
-          config: {
-            systemInstruction: systemInstruction,
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        });
-        if (response.text) {
-          const data = JSON.parse(response.text);
-          if (data.verdict === 'SCAM' && data.confidence > 80) {
+        const data = await callAiApi(`Analyze this: ${reportEvidence}`, systemInstruction, "application/json");
+        if (data.text) {
+          const parsedData = JSON.parse(data.text);
+          if (parsedData.verdict === 'SCAM' && parsedData.confidence > 80) {
             aiVerified = true;
           }
         }
